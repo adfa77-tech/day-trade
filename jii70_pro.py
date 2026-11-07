@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-JII70 PRO Terminal — tampilan layaknya aplikasi sekuritas
+JII70 PRO Terminal — Tampilan Sekuritas Modern (Glassmorphism & 3D Top Menu)
 Jalankan: streamlit run jii70_pro.py
 """
 
@@ -17,7 +17,7 @@ st.set_page_config(
     page_title="JII70 PRO Terminal",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 JII70 = [
@@ -121,7 +121,6 @@ def calc_mom(close, n=10):
 # ═══════════════════════════════════════════════════════════
 
 def generate_signal(row: dict) -> dict:
-    """Generate BUY / HOLD / SELL with reasons (multi-factor confluence)."""
     buy_pts = 0
     sell_pts = 0
     buy_why = []
@@ -141,11 +140,10 @@ def generate_signal(row: dict) -> dict:
     chg = row.get("%Hari") or 0
     vol = row.get("Volume") or 0
 
-    # RSI
     if rsi is not None:
         if rsi < 30:
             buy_pts += 3
-            buy_why.append(f"RSI oversold ({rsi}) — potensi bounce")
+            buy_why.append(f"RSI oversold ({rsi})")
         elif rsi < 40:
             buy_pts += 2
             buy_why.append(f"RSI rendah ({rsi})")
@@ -156,48 +154,43 @@ def generate_signal(row: dict) -> dict:
             sell_pts += 1
             sell_why.append(f"RSI tinggi ({rsi})")
 
-    # MACD
     if macd_h is not None:
         if macd_h > 0:
             buy_pts += 2
-            buy_why.append("MACD histogram positif (momentum naik)")
+            buy_why.append("MACD positif")
         else:
             sell_pts += 2
-            sell_why.append("MACD histogram negatif (momentum turun)")
+            sell_why.append("MACD negatif")
 
-    # Trend SMA20 / EMA9
     if sma20 and price:
         if price > sma20:
             buy_pts += 2
-            buy_why.append("Harga di atas SMA20 (uptrend pendek)")
+            buy_why.append("Diatas SMA20")
         else:
             sell_pts += 2
-            sell_why.append("Harga di bawah SMA20 (downtrend pendek)")
+            sell_why.append("Dibawah SMA20")
     if ema9 and price:
         if price > ema9:
             buy_pts += 1
         else:
             sell_pts += 1
 
-    # Stochastic
     if stoch is not None:
         if stoch < 20:
             buy_pts += 2
-            buy_why.append(f"Stochastic oversold ({stoch})")
+            buy_why.append(f"Stoch oversold")
         elif stoch > 80:
             sell_pts += 2
-            sell_why.append(f"Stochastic overbought ({stoch})")
+            sell_why.append(f"Stoch overbought")
 
-    # Bollinger %B
     if pct_b is not None:
         if pct_b < 0.2:
             buy_pts += 2
-            buy_why.append("Di zona bawah Bollinger (mean reversion)")
+            buy_why.append("Zona bawah Bollinger")
         elif pct_b > 0.95:
             sell_pts += 2
-            sell_why.append("Di zona atas Bollinger (extended)")
+            sell_why.append("Zona atas Bollinger")
 
-    # Value
     if pe is not None and 0 < pe < 10:
         buy_pts += 2
         buy_why.append(f"PE menarik ({pe})")
@@ -208,51 +201,40 @@ def generate_signal(row: dict) -> dict:
         buy_pts += 2
         buy_why.append(f"PBV diskon ({pb})")
 
-    # Momentum
     if mom is not None:
         if 1 < mom < 10:
             buy_pts += 1
-            buy_why.append(f"Momentum 10h positif (+{mom}%)")
+            buy_why.append(f"Momentum positif")
         elif mom < -10:
             sell_pts += 1
-            sell_why.append(f"Momentum 10h lemah ({mom}%)")
+            sell_why.append(f"Momentum lemah")
 
-    # Volume interest
     if vol > 50_000_000:
         buy_pts += 1
-        buy_why.append("Volume tinggi (minat pasar)")
+        buy_why.append("Volume tinggi")
 
-    # Daily crash caution
     if chg < -5:
         sell_pts += 1
-        sell_why.append(f"Koreksi tajam hari ini ({chg}%)")
+        sell_why.append(f"Koreksi tajam")
 
-    # Decision
     net = buy_pts - sell_pts
     if buy_pts >= 6 and net >= 3:
         signal = "BELI"
         conf = min(95, 55 + buy_pts * 4)
-        color = "#16a34a"
     elif sell_pts >= 6 and net <= -3:
         signal = "JUAL"
         conf = min(95, 55 + sell_pts * 4)
-        color = "#dc2626"
     elif buy_pts >= 4 and net >= 1:
         signal = "AKUMULASI"
         conf = min(80, 45 + buy_pts * 3)
-        color = "#65a30d"
     elif sell_pts >= 4 and net <= -1:
         signal = "REDUKSI"
         conf = min(80, 45 + sell_pts * 3)
-        color = "#ea580c"
     else:
         signal = "HOLD"
         conf = 50
-        color = "#64748b"
 
-    # Suggested levels
-    stop = None
-    target = None
+    stop, target = None, None
     if price and atr:
         if signal in ("BELI", "AKUMULASI"):
             stop = round(price - 1.5 * atr, 0)
@@ -264,9 +246,6 @@ def generate_signal(row: dict) -> dict:
     return {
         "Sinyal": signal,
         "Confidence": conf,
-        "Color": color,
-        "BuyPts": buy_pts,
-        "SellPts": sell_pts,
         "AlasanBeli": buy_why[:4],
         "AlasanJual": sell_why[:4],
         "Stop": stop,
@@ -275,7 +254,7 @@ def generate_signal(row: dict) -> dict:
     }
 
 # ═══════════════════════════════════════════════════════════
-# DATA
+# DATA FETCHERS
 # ═══════════════════════════════════════════════════════════
 
 @st.cache_data(ttl=90, show_spinner=False)
@@ -304,12 +283,11 @@ def fetch_ihsg():
             "change": round(float(chg), 2) if chg is not None else None,
             "changePct": round(float(chg_pct), 2) if chg_pct is not None else None,
             "open": round(float(info.get("regularMarketOpen") or last.get("Open") or 0), 2) or None,
-            "high": round(float(info.get("dayHigh") or info.get("regularMarketDayHigh") or last.get("High") or 0), 2) or None,
-            "low": round(float(info.get("dayLow") or info.get("regularMarketDayLow") or last.get("Low") or 0), 2) or None,
-            "prev": round(float(prev), 2) if prev else None,
+            "high": round(float(info.get("dayHigh") or last.get("High") or 0), 2) or None,
+            "low": round(float(info.get("dayLow") or last.get("Low") or 0), 2) or None,
         }
-    except Exception as e:
-        return {"error": str(e)}
+    except Exception:
+        return {}
 
 @st.cache_data(ttl=120, show_spinner=False)
 def fetch_one(code: str) -> dict | None:
@@ -329,8 +307,8 @@ def fetch_one(code: str) -> dict | None:
         name = (info.get("shortName") or info.get("longName") or code)
         name = name.replace(" Tbk", "").replace(" (Persero)", "").replace("Tbk.", "").strip()
 
-        macd, sig, hist_m = calc_macd(close)
-        mid, up, lo, pct_b = calc_bb(close)
+        _, _, hist_m = calc_macd(close)
+        _, _, _, pct_b = calc_bb(close)
 
         return {
             "Kode": code,
@@ -348,13 +326,11 @@ def fetch_one(code: str) -> dict | None:
             "Stoch": calc_stoch(high, low, close),
             "%B": pct_b,
             "Mom10": calc_mom(close, 10),
-            "Sektor": info.get("sector") or "Lainnya",
-            "MarketCap": info.get("marketCap"),
         }
     except Exception:
         return None
 
-@st.cache_data(ttl=120, show_spinner="Memuat data pasar & sinyal...")
+@st.cache_data(ttl=120, show_spinner="Memuat data pasar & sinyal JII70...")
 def fetch_universe() -> pd.DataFrame:
     rows = []
     with ThreadPoolExecutor(max_workers=14) as ex:
@@ -367,102 +343,91 @@ def fetch_universe() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
     signals = [generate_signal(r) for r in rows]
-    for k in ["Sinyal", "Confidence", "Color", "AlasanBeli", "AlasanJual", "Stop", "Target"]:
+    for k in ["Sinyal", "Confidence", "AlasanBeli", "AlasanJual", "Stop", "Target", "ATR"]:
         df[k] = [s[k] for s in signals]
-    # Sort: BELI first, then by confidence
     order = {"BELI": 0, "AKUMULASI": 1, "HOLD": 2, "REDUKSI": 3, "JUAL": 4}
     df["_ord"] = df["Sinyal"].map(order)
     df = df.sort_values(["_ord", "Confidence"], ascending=[True, False]).drop(columns="_ord")
     return df.reset_index(drop=True)
 
-
 def build_excel(df: pd.DataFrame) -> bytes:
-    """Export watchlist + signals to Excel (.xlsx)."""
     out = io.BytesIO()
     export = df.copy()
-    # Flatten list columns
     if "AlasanBeli" in export.columns:
-        export["AlasanBeli"] = export["AlasanBeli"].apply(
-            lambda x: " | ".join(x) if isinstance(x, list) else str(x or "")
-        )
+        export["AlasanBeli"] = export["AlasanBeli"].apply(lambda x: " | ".join(x) if isinstance(x, list) else str(x or ""))
     if "AlasanJual" in export.columns:
-        export["AlasanJual"] = export["AlasanJual"].apply(
-            lambda x: " | ".join(x) if isinstance(x, list) else str(x or "")
-        )
-    cols = [c for c in [
-        "Kode", "Nama", "Harga", "%Hari", "Volume", "PE", "PBV", "RSI",
-        "SMA20", "EMA9", "MACD_H", "ATR", "Stoch", "%B", "Mom10",
-        "Sinyal", "Confidence", "Stop", "Target", "AlasanBeli", "AlasanJual", "Sektor"
-    ] if c in export.columns]
-    export = export[cols]
-    # Sheet BELI only
+        export["AlasanJual"] = export["AlasanJual"].apply(lambda x: " | ".join(x) if isinstance(x, list) else str(x or ""))
     beli = export[export["Sinyal"] == "BELI"] if "Sinyal" in export.columns else export.head(0)
     with pd.ExcelWriter(out, engine="openpyxl") as writer:
         export.to_excel(writer, sheet_name="Semua JII70", index=False)
         beli.to_excel(writer, sheet_name="Sinyal BELI", index=False)
-        # Summary
-        if "Sinyal" in export.columns:
-            summary = export["Sinyal"].value_counts().rename_axis("Sinyal").reset_index(name="Jumlah")
-            summary.to_excel(writer, sheet_name="Ringkasan", index=False)
     return out.getvalue()
 
-
 # ═══════════════════════════════════════════════════════════
-# UI STYLE
+# GLASSMORPHISM & 3D STYLING (CSS)
 # ═══════════════════════════════════════════════════════════
 
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
-html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
-.stApp { background: #0b1220; }
-section[data-testid="stSidebar"] { background: #0f172a; border-right: 1px solid #1e293b; }
-h1,h2,h3,h4 { color: #e2e8f0 !important; }
-.block-container { padding-top: 1.2rem; }
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
 
-.topbar {
-  background: linear-gradient(90deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-  border: 1px solid #334155; border-radius: 12px;
-  padding: 14px 18px; margin-bottom: 14px;
-  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+html, body, [class*="css"] {
+    font-family: 'Plus Jakarta Sans', sans-serif !important;
 }
-.brand { font-size: 1.25rem; font-weight: 700; color: #f8fafc; letter-spacing: -0.02em; }
-.brand span { color: #38bdf8; }
-.ihsg-box { text-align: right; }
-.ihsg-label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; }
-.ihsg-price { font-family: 'IBM Plex Mono', monospace; font-size: 1.5rem; font-weight: 600; color: #f1f5f9; }
-.up { color: #4ade80 !important; }
-.down { color: #f87171 !important; }
 
-.card {
-  background: #111827; border: 1px solid #1f2937; border-radius: 12px;
-  padding: 14px 16px; height: 100%;
+.stApp {
+    background: radial-gradient(circle at 10% 10%, #0f172a 0%, #090d16 100%);
+    color: #f1f5f9;
 }
-.card-title { font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-.card-value { font-family: 'IBM Plex Mono', monospace; font-size: 1.35rem; font-weight: 600; color: #f8fafc; }
-.card-sub { font-size: 0.8rem; color: #64748b; margin-top: 4px; }
 
-.signal-pill {
-  display: inline-block; padding: 3px 10px; border-radius: 6px;
-  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em;
+/* Sembunyikan sidebar bawaan agar bersih di atas */
+section[data-testid="stSidebar"] {
+    display: none !important;
 }
-.sig-BELI { background: #14532d; color: #4ade80; }
-.sig-AKUMULASI { background: #365314; color: #a3e635; }
-.sig-HOLD { background: #334155; color: #94a3b8; }
-.sig-REDUKSI { background: #7c2d12; color: #fb923c; }
-.sig-JUAL { background: #7f1d1d; color: #f87171; }
 
-.alert-box {
-  background: linear-gradient(135deg, #14532d22, #052e16);
-  border: 1px solid #166534; border-radius: 12px;
-  padding: 12px 16px; margin-bottom: 8px;
+/* Efek Kaca & 3D untuk Navbar Atas / Container Utama */
+.glass-nav {
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 14px 20px;
+    box-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.37), inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
 }
-.alert-code { font-weight: 700; color: #4ade80; font-size: 1.05rem; }
-.alert-meta { color: #94a3b8; font-size: 0.8rem; }
 
-div[data-testid="stDataFrame"] { border: 1px solid #1e293b; border-radius: 10px; }
-.stMetric { background: #111827; border: 1px solid #1f2937; border-radius: 10px; padding: 8px 12px; }
-[data-testid="stMetricValue"] { font-family: 'IBM Plex Mono', monospace; }
+.glass-card {
+    background: rgba(30, 41, 59, 0.55);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.glass-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+/* Tombol / Pilihan Menu Atas */
+div.stButton > button {
+    border-radius: 10px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.metric-font {
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+div[data-testid="stDataFrame"] {
+    background: rgba(15, 23, 42, 0.6);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
 </style>
 """
 
@@ -484,118 +449,56 @@ def fmt_rp(n):
 # ═══════════════════════════════════════════════════════════
 
 def page_terminal(df: pd.DataFrame, ihsg: dict):
-    st.markdown(CSS, unsafe_allow_html=True)
-
-    # Top bar — native components (hindari HTML mentah di browser)
-    left, right = st.columns([2, 2])
-    with left:
-        st.markdown("## JII70 **PRO** Terminal")
-        st.caption("Saham syariah JII70 · Sinyal multifaktor · Yahoo Finance delayed")
-    with right:
+    # Top Summary & IHSG Banner
+    c_title, c_ihsg = st.columns([2, 2])
+    with c_title:
+        st.markdown("### ⚡ JII70 **PRO Terminal**")
+        st.caption("Realtime Analysis & Multifactor Signal Engine")
+    with c_ihsg:
         if ihsg.get("price"):
-            chg_pct = ihsg.get("changePct")
-            chg = ihsg.get("change")
-            delta = None
-            if chg_pct is not None:
-                delta = f"{chg_pct:+.2f}%"
-                if chg is not None:
-                    delta += f" ({chg:+,.2f})"
-            st.metric(
-                "IHSG (Yahoo delayed)",
-                f"{ihsg['price']:,.2f}",
-                delta=delta,
-            )
-            o = ihsg.get("open") or "—"
-            h = ihsg.get("high") or "—"
-            l = ihsg.get("low") or "—"
-            st.caption(f"Open {o} · High {h} · Low {l}")
-        else:
-            st.warning("IHSG tidak tersedia — klik Refresh")
+            chg_pct = ihsg.get("changePct", 0)
+            chg = ihsg.get("change", 0)
+            st.metric("IHSG Index", f"{ihsg['price']:,.2f}", delta=f"{chg_pct:+.2f}% ({chg:+,.2f})")
 
-    # KPI row
+    # KPI Cards Row
     n_beli = int((df["Sinyal"] == "BELI").sum()) if len(df) else 0
     n_akum = int((df["Sinyal"] == "AKUMULASI").sum()) if len(df) else 0
     n_jual = int((df["Sinyal"].isin(["JUAL", "REDUKSI"])).sum()) if len(df) else 0
     n_hold = int((df["Sinyal"] == "HOLD").sum()) if len(df) else 0
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Universe", f"{len(df)} saham")
-    c2.metric("Sinyal BELI", n_beli)
-    c3.metric("Akumulasi", n_akum)
-    c4.metric("Hold", n_hold)
-    c5.metric("Jual / Reduksi", n_jual)
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Universe", f"{len(df)} Saham")
+    k2.metric("Sinyal BELI", n_beli)
+    k3.metric("Akumulasi", n_akum)
+    k4.metric("Hold", n_hold)
+    k5.metric("Jual / Reduksi", n_jual)
 
-    # Notifikasi + Export bar
+    st.markdown("---")
+
+    # Alert & Export Panel
     alerts_all = df[df["Sinyal"] == "BELI"]
-    n_alert = len(alerts_all)
-
-    exp_c1, exp_c2, exp_c3 = st.columns([2, 1, 1])
-    with exp_c1:
-        if n_alert > 0:
-            st.success(f"🔔 **{n_alert} saham** mendapat sinyal **BELI** saat ini — cek daftar di bawah.")
-            # Toast sekali per session key
-            toast_key = f"toast_beli_{n_alert}_{datetime.now().strftime('%Y%m%d%H')}"
-            if toast_key not in st.session_state:
-                names = ", ".join(alerts_all["Kode"].head(5).tolist())
-                st.toast(f"Sinyal BELI: {names}", icon="🔔")
-                st.session_state[toast_key] = True
+    ac1, ac2 = st.columns([3, 1])
+    with ac1:
+        if len(alerts_all) > 0:
+            st.success(f"🔔 Ditemukan **{len(alerts_all)} saham** dengan konfluensi sinyal **BELI** kuat.")
         else:
-            st.info("Tidak ada sinyal BELI kuat saat ini. Pantau AKUMULASI di screener.")
-    with exp_c2:
+            st.info("Belum ada sinyal BELI kuat saat ini. Pantau menu Screener untuk akumulasi.")
+    with ac2:
         xlsx = build_excel(df)
         st.download_button(
             "📥 Export Excel",
             data=xlsx,
-            file_name=f"JII70_sinyal_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+            file_name=f"JII70_Terminal_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
-    with exp_c3:
-        # CSV cepat
-        csv_buf = df.drop(columns=[c for c in ["Color", "AlasanBeli", "AlasanJual"] if c in df.columns], errors="ignore").to_csv(index=False).encode("utf-8-sig")
-        st.download_button(
-            "📄 Export CSV",
-            data=csv_buf,
-            file_name=f"JII70_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
 
-    # ALERTS — saham layak beli
-    st.markdown("### 🔔 Alert — Saham Layak Dicermati (BELI)")
-    alerts = alerts_all.head(8)
-    if alerts.empty:
-        st.info("Belum ada saham dengan konfluensi BELI yang kuat saat ini. Cek tab Screener untuk AKUMULASI.")
-    else:
-        cols = st.columns(min(4, len(alerts)))
-        for i, (_, r) in enumerate(alerts.iterrows()):
-            with cols[i % len(cols)]:
-                reasons = r["AlasanBeli"] if isinstance(r["AlasanBeli"], list) else []
-                reason_txt = " · ".join(reasons[:2]) if reasons else "—"
-                pct = r["%Hari"]
-                delta = f"{pct:+.1f}%" if pct is not None else None
-                with st.container(border=True):
-                    st.markdown(f"**{r['Kode']}** · `BELI`")
-                    st.metric("Harga", f"{r['Harga']:,.0f}" if r["Harga"] else "—", delta=delta)
-                    st.caption(f"Conf {r['Confidence']}% · {reason_txt}")
-                    st.link_button(
-                        f"Stockbit {r['Kode']} ↗",
-                        f"https://stockbit.com/symbol/{r['Kode']}",
-                        use_container_width=True,
-                    )
-                    if r.get("Stop") and r.get("Target"):
-                        st.caption(f"Stop ~{r['Stop']:,.0f} · Target ~{r['Target']:,.0f}")
-
-    st.divider()
-
-    # Main table
-    st.markdown("### 📋 Watchlist JII70")
-    st.caption("Klik header kolom untuk sort · Klik kode di kolom link untuk buka Stockbit")
-
+    # Watchlist Main Table
+    st.markdown("#### 📋 Watchlist & Sinyal JII70")
     show = df.copy()
     show["Vol"] = show["Volume"].apply(fmt_vol)
-    show["Link"] = show["Kode"].apply(lambda x: f"https://stockbit.com/symbol/{x}")
-    show["Alasan"] = show.apply(
+    show["Link Stockbit"] = show["Kode"].apply(lambda x: f"https://stockbit.com/symbol/{x}")
+    show["Alasan Utama"] = show.apply(
         lambda r: " | ".join((r["AlasanBeli"] or [])[:2]) if r["Sinyal"] in ("BELI", "AKUMULASI")
         else (" | ".join((r["AlasanJual"] or [])[:2]) if r["Sinyal"] in ("JUAL", "REDUKSI") else "—"),
         axis=1,
@@ -603,32 +506,25 @@ def page_terminal(df: pd.DataFrame, ihsg: dict):
 
     display = show[[
         "Kode", "Nama", "Harga", "%Hari", "Vol", "PE", "PBV", "RSI",
-        "SMA20", "Sinyal", "Confidence", "Stop", "Target", "Alasan", "Link"
+        "SMA20", "Sinyal", "Confidence", "Stop", "Target", "Alasan Utama", "Link Stockbit"
     ]].copy()
 
     def style_signal(val):
         colors = {
-            "BELI": "background-color:#14532d;color:#4ade80;font-weight:700",
-            "AKUMULASI": "background-color:#365314;color:#a3e635;font-weight:600",
+            "BELI": "background-color:#065f46;color:#34d399;font-weight:700",
+            "AKUMULASI": "background-color:#365314;color:#bef264;font-weight:600",
             "HOLD": "background-color:#334155;color:#94a3b8",
-            "REDUKSI": "background-color:#7c2d12;color:#fb923c;font-weight:600",
-            "JUAL": "background-color:#7f1d1d;color:#f87171;font-weight:700",
+            "REDUKSI": "background-color:#7c2d12;color:#fdba74;font-weight:600",
+            "JUAL": "background-color:#7f1d1d;color:#fca5a5;font-weight:700",
         }
         return colors.get(val, "")
-
-    def style_pct(val):
-        if pd.isna(val): return ""
-        if val > 0: return "color:#4ade80;font-weight:600"
-        if val < 0: return "color:#f87171;font-weight:600"
-        return ""
 
     styled = (
         display.style
         .map(style_signal, subset=["Sinyal"])
-        .map(style_pct, subset=["%Hari"])
         .format({
             "Harga": "{:,.0f}",
-            "%Hari": "{:+.2f}",
+            "%Hari": "{:+.2f}%",
             "PE": "{:.1f}",
             "PBV": "{:.2f}",
             "RSI": "{:.1f}",
@@ -642,230 +538,128 @@ def page_terminal(df: pd.DataFrame, ihsg: dict):
     st.dataframe(
         styled,
         use_container_width=True,
-        height=480,
+        height=450,
         hide_index=True,
         column_config={
-            "Link": st.column_config.LinkColumn("Stockbit", display_text="Buka ↗"),
+            "Link Stockbit": st.column_config.LinkColumn("Stockbit", display_text="Buka ↗"),
             "Confidence": st.column_config.ProgressColumn("Conf", min_value=0, max_value=100, format="%d%%"),
-            "Alasan": st.column_config.TextColumn("Alasan utama", width="large"),
-            "Kode": st.column_config.TextColumn("Kode", width="small"),
-        },
+        }
     )
 
-    st.caption(f"Update {datetime.now().strftime('%d %b %Y %H:%M WIB')} · Data Yahoo Finance (delayed) · Bukan saran investasi")
-
-
 def page_screener(df: pd.DataFrame):
-    st.markdown(CSS, unsafe_allow_html=True)
-    st.subheader("🔍 Screener & Filter")
-
+    st.markdown("### 🔍 Advanced Stock Screener")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        sigs = st.multiselect("Sinyal", ["BELI", "AKUMULASI", "HOLD", "REDUKSI", "JUAL"],
-                              default=["BELI", "AKUMULASI", "HOLD", "REDUKSI", "JUAL"])
+        sigs = st.multiselect("Sinyal Filter", ["BELI", "AKUMULASI", "HOLD", "REDUKSI", "JUAL"], default=["BELI", "AKUMULASI"])
     with c2:
-        q = st.text_input("Cari kode/nama")
+        q = st.text_input("Cari Kode / Nama")
     with c3:
-        rsi_rng = st.slider("RSI", 0, 100, (0, 100))
+        rsi_rng = st.slider("Rentang RSI", 0, 100, (0, 100))
     with c4:
-        pe_max = st.number_input("PE max (0=off)", 0.0, 100.0, 0.0)
+        pe_max = st.number_input("Maksimal PE", 0.0, 100.0, 0.0)
 
     view = df[df["Sinyal"].isin(sigs)].copy()
     if q:
-        ql = q.lower()
-        view = view[view["Kode"].str.lower().str.contains(ql) | view["Nama"].str.lower().str.contains(ql)]
+        view = view[view["Kode"].str.lower().str.contains(q.lower()) | view["Nama"].str.lower().str.contains(q.lower())]
     view = view[(view["RSI"].fillna(50) >= rsi_rng[0]) & (view["RSI"].fillna(50) <= rsi_rng[1])]
     if pe_max > 0:
         view = view[view["PE"].isna() | (view["PE"] <= pe_max)]
 
-    sc1, sc2 = st.columns([3, 1])
-    with sc1:
-        st.write(f"**{len(view)}** saham cocok")
-    with sc2:
-        if len(view):
-            st.download_button(
-                "📥 Excel hasil filter",
-                data=build_excel(view),
-                file_name=f"JII70_filter_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-
-
+    st.write(f"Menampilkan **{len(view)}** saham sesuai kriteria.")
     for _, r in view.iterrows():
-        with st.expander(f"{r['Kode']}  ·  {r['Harga']:,.0f}  ·  {r['Sinyal']} ({r['Confidence']}%)", expanded=False):
-            a, b, c = st.columns([2, 2, 1])
-            with a:
-                st.markdown("**Alasan BELI**")
-                for x in (r["AlasanBeli"] or ["—"]):
+        with st.expander(f"{r['Kode']} — {r['Nama']} | Harga: Rp {r['Harga']:,.0f} | Sinyal: {r['Sinyal']} ({r['Confidence']}%)"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Alasan Buy / Pendukung:**")
+                for x in (r["AlasanBeli"] or ["-"]):
                     st.markdown(f"- {x}")
-            with b:
-                st.markdown("**Alasan JUAL / waspada**")
-                for x in (r["AlasanJual"] or ["—"]):
-                    st.markdown(f"- {x}")
-            with c:
-                st.metric("RSI", r["RSI"])
-                st.metric("PE", r["PE"] if r["PE"] else "—")
-                if r.get("Stop"):
-                    st.caption(f"Stop ~{r['Stop']:,.0f}")
-                if r.get("Target"):
-                    st.caption(f"Target ~{r['Target']:,.0f}")
-            st.link_button("Buka di Stockbit ↗", f"https://stockbit.com/symbol/{r['Kode']}")
-
+            with col2:
+                st.markdown("**Level Teknis:**")
+                st.write(f"RSI: {r['RSI']} | PE: {r['PE']} | PBV: {r['PBV']}")
+                st.write(f"Stop Loss: ~{r.get('Stop', '—')} | Target: ~{r.get('Target', '—')}")
 
 def page_calculator(df: pd.DataFrame):
-    st.markdown(CSS, unsafe_allow_html=True)
-    st.subheader("🧮 Kalkulator Saham")
+    st.markdown("### 🧮 Kalkulator Risiko & Ukuran Posisi (Position Sizing)")
+    c1, c2 = st.columns(2)
+    with c1:
+        modal = st.number_input("Total Modal (Rp)", value=50_000_000, step=1_000_000)
+        risk_pct = st.slider("Risiko per Trade (%)", 0.5, 3.0, 1.0)
+        entry = st.number_input("Harga Entry", value=1000.0)
+    with c2:
+        stop = st.number_input("Harga Stop Loss", value=950.0)
+        target = st.number_input("Harga Target Take Profit", value=1100.0)
 
-    tab1, tab2, tab3 = st.tabs(["Position Size", "Profit / Loss", "Break-even + Lot"])
-
-    with tab1:
-        st.markdown("**Hitung jumlah lot sesuai risiko** (aturan trader pro: risk per trade 0.5%–2%)")
-        c1, c2 = st.columns(2)
-        with c1:
-            modal = st.number_input("Modal (Rp)", min_value=1_000_000, value=100_000_000, step=1_000_000, format="%d")
-            risk_pct = st.slider("% Risiko per trade", 0.25, 5.0, 1.0, 0.25)
-            entry = st.number_input("Harga entry", min_value=1.0, value=1000.0, step=1.0)
-        with c2:
-            stop = st.number_input("Harga stop loss", min_value=1.0, value=950.0, step=1.0)
-            target = st.number_input("Harga target (opsional)", min_value=0.0, value=1100.0, step=1.0)
-
-        risk_rp = modal * (risk_pct / 100)
-        jarak = abs(entry - stop)
-        if jarak > 0:
-            lembar = int(risk_rp / jarak)
-            lot = lembar // 100
-            nilai = lot * 100 * entry
-            st.success(f"Lot maksimal: **{lot:,} lot** ({lot*100:,} lembar) · Nilai belanja ≈ {fmt_rp(nilai)}")
-            st.write(f"Risiko uang: {fmt_rp(risk_rp)} · Jarak stop: Rp {jarak:,.0f}/lembar")
-            if target > 0 and entry != stop:
-                rr = abs(target - entry) / jarak
-                st.write(f"Risk–Reward: **1 : {rr:.2f}**")
-                if rr < 1.5:
-                    st.warning("RR di bawah 1.5 — banyak trader pro melewati setup ini.")
-        else:
-            st.error("Entry dan stop tidak boleh sama.")
-
-    with tab2:
-        c1, c2 = st.columns(2)
-        with c1:
-            buy = st.number_input("Harga beli", min_value=1.0, value=1000.0, key="pl_buy")
-            lots = st.number_input("Jumlah lot", min_value=1, value=10, key="pl_lot")
-        with c2:
-            sell = st.number_input("Harga jual / harga sekarang", min_value=1.0, value=1050.0, key="pl_sell")
-            fee_pct = st.number_input("Fee beli+jual total (%)", min_value=0.0, value=0.3, step=0.05, key="pl_fee")
-        lembar = int(lots * 100)
-        gross = (sell - buy) * lembar
-        fee = (buy + sell) * lembar * (fee_pct / 100)
-        net = gross - fee
-        color = "normal" if net >= 0 else "inverse"
-        st.metric("Profit/Loss bersih", fmt_rp(net), delta=f"{(net/(buy*lembar)*100):+.2f}%")
-        st.caption(f"Gross {fmt_rp(gross)} · Estimasi fee {fmt_rp(fee)}")
-
-    with tab3:
-        st.markdown("**Berapa lot agar fee tertutup + target profit**")
-        c1, c2 = st.columns(2)
-        with c1:
-            entry2 = st.number_input("Entry", value=1000.0, key="be_e")
-            target_pct = st.number_input("Target profit %", value=2.0, key="be_t")
-        with c2:
-            fee2 = st.number_input("Fee total %", value=0.3, key="be_f")
-            modal2 = st.number_input("Modal tersedia", value=20_000_000, step=100_000, key="be_m", format="%d")
-        need_move = fee2 + target_pct
-        st.write(f"Harga perlu bergerak minimal **{need_move:.2f}%** agar fee + target tercapai.")
-        max_lot = int(modal2 // (entry2 * 100)) if entry2 > 0 else 0
-        st.write(f"Lot maksimal dengan modal ini: **{max_lot:,} lot**")
-
-    # Quick pick from universe
-    if len(df):
-        st.divider()
-        st.markdown("**Isi cepat dari sinyal BELI**")
-        picks = df[df["Sinyal"] == "BELI"]["Kode"].tolist()[:10]
-        if picks:
-            st.write(" · ".join([f"[{c}](https://stockbit.com/symbol/{c})" for c in picks]))
-
+    risk_rp = modal * (risk_pct / 100)
+    jarak = abs(entry - stop)
+    if jarak > 0:
+        lembar = int(risk_rp / jarak)
+        lot = lembar // 100
+        st.success(from_calc := f"Rekomendasi Alokasi: **{lot:,} Lot** ({lembar:,} lembar saham) | Risiko Dana: {fmt_rp(risk_rp)}")
+    else:
+        st.warning("Harga entry dan stop loss tidak boleh sama.")
 
 def page_detail(df: pd.DataFrame):
-    st.markdown(CSS, unsafe_allow_html=True)
-    st.subheader("📄 Detail Saham + Sinyal")
+    st.markdown("### 📄 Analisis Mendalam Saham")
     codes = df["Kode"].tolist() if len(df) else JII70
-    code = st.selectbox("Pilih kode JII70", codes)
+    code = st.selectbox("Pilih Emiten JII70", codes)
     row = df[df["Kode"] == code]
-    if row.empty:
-        st.warning("Data belum tersedia, coba refresh.")
-        return
-    r = row.iloc[0]
+    if not row.empty:
+        r = row.iloc[0]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Harga Terkini", f"Rp {r['Harga']:,.0f}", f"{r['%Hari']:+.2f}%")
+        c2.metric("Sinyal", r['Sinyal'], f"Conf: {r['Confidence']}%")
+        c3.metric("RSI (14)", r['RSI'])
+        c4.metric("ATR Volatility", r['ATR'])
 
-    h1, h2, h3, h4 = st.columns(4)
-    h1.metric("Harga", f"{r['Harga']:,.0f}" if r["Harga"] else "—", delta=f"{r['%Hari']:+.2f}%" if r["%Hari"] is not None else None)
-    h2.metric("Sinyal", r["Sinyal"], delta=f"Conf {r['Confidence']}%")
-    h3.metric("RSI", r["RSI"] if r["RSI"] else "—")
-    h4.metric("ATR", r["ATR"] if r["ATR"] else "—")
-
-    a, b = st.columns(2)
-    with a:
-        st.markdown("#### ✅ Alasan mendukung BELI")
-        for x in (r["AlasanBeli"] or ["Tidak ada alasan beli kuat"]):
-            st.markdown(f"- {x}")
-        if r.get("Stop") and r.get("Target"):
-            st.info(f"Saran level (ATR-based): Stop **{r['Stop']:,.0f}** · Target **{r['Target']:,.0f}**")
-    with b:
-        st.markdown("#### ⚠️ Alasan JUAL / waspada")
-        for x in (r["AlasanJual"] or ["Tidak ada alasan jual kuat"]):
-            st.markdown(f"- {x}")
-        st.markdown(f"""
-| Indikator | Nilai |
-|-----------|------|
-| PE | {r['PE'] if r['PE'] else '—'} |
-| PBV | {r['PBV'] if r['PBV'] else '—'} |
-| SMA20 | {r['SMA20'] if r['SMA20'] else '—'} |
-| EMA9 | {r['EMA9'] if r['EMA9'] else '—'} |
-| Stoch | {r['Stoch'] if r['Stoch'] else '—'} |
-| %B Boll | {r['%B'] if r['%B'] else '—'} |
-| Mom 10h | {r['Mom10'] if r['Mom10'] is not None else '—'}% |
-| Volume | {fmt_vol(r['Volume'])} |
-""")
-
-    st.link_button(f"Analisis {code} di Stockbit ↗", f"https://stockbit.com/symbol/{code}", use_container_width=True)
-    st.caption("Sinyal multifaktor (RSI, MACD, MA, Stochastic, Bollinger, PE/PBV, volume). Bukan rekomendasi final.")
-
+        st.markdown(f"**Alasan Utama Sinyal {r['Sinyal']}:**")
+        for b in r["AlasanBeli"]:
+            st.markdown(f"✅ {b}")
+        for s in r["AlasanJual"]:
+            st.markdown(f"⚠️ {s}")
 
 # ═══════════════════════════════════════════════════════════
-# MAIN
+# MAIN CONTROLLER (TOP NAVBAR 3D & GLASS)
 # ═══════════════════════════════════════════════════════════
 
 def main():
-    with st.sidebar:
-        st.markdown("### 📊 JII70 PRO")
-        menu = st.radio(
-            "Menu",
-            ["Terminal", "Screener", "Kalkulator", "Detail Saham"],
-            label_visibility="collapsed",
-        )
-        st.divider()
-        if st.button("🔄 Refresh Data", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        st.caption("Data: Yahoo Finance (delayed ±15 mnt)\nNotif toast saat ada BELI\nExport Excel di Terminal")
-        st.divider()
-        st.markdown("""
-**Legenda sinyal**
-- **BELI** — konfluensi kuat
-- **AKUMULASI** — cenderung positif
-- **HOLD** — netral
-- **REDUKSI** — waspada
-- **JUAL** — konfluensi negatif
-
-Stop/Target memakai **1.5× / 2.5× ATR**.
-        """)
+    st.markdown(CSS, unsafe_allow_html=True)
 
     ihsg = fetch_ihsg()
     df = fetch_universe()
 
     if df.empty:
-        st.error("Gagal memuat data saham. Periksa koneksi internet lalu klik Refresh.")
+        st.error("Gagal memuat data dari Yahoo Finance. Periksa koneksi internet Anda.")
         return
 
+    # --- NAVBAR UTAMA DI BAGIAN ATAS (Menggantikan Sidebar) ---
+    st.markdown('<div class="glass-nav">', unsafe_allow_html=True)
+    nav_col1, nav_col2, nav_col3, nav_col4, nav_col5 = st.columns([2, 1, 1, 1, 1])
+
+    with nav_col1:
+        st.markdown("### 📈 **JII70 PRO** <span style='font-size:0.7rem; color:#38bdf8;'>SEC-TERMINAL</span>", unsafe_allow_html=True)
+
+    # Menggunakan session state untuk navigasi tab atas
+    if 'active_menu' not in st.session_state:
+        st.session_state.active_menu = "Terminal"
+
+    # Tombol Menu Navigasi Horizontal Atas
+    with nav_col2:
+        if st.button("📊 Terminal", use_container_width=True):
+            st.session_state.active_menu = "Terminal"
+    with nav_col3:
+        if st.button("🔍 Screener", use_container_width=True):
+            st.session_state.active_menu = "Screener"
+    with nav_col4:
+        if st.button("🧮 Kalkulator", use_container_width=True):
+            st.session_state.active_menu = "Kalkulator"
+    with nav_col5:
+        if st.button("📄 Detail", use_container_width=True):
+            st.session_state.active_menu = "Detail Saham"
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Render Halaman Berdasarkan Pilihan Menu Atas
+    menu = st.session_state.active_menu
     if menu == "Terminal":
         page_terminal(df, ihsg)
     elif menu == "Screener":
@@ -876,11 +670,7 @@ Stop/Target memakai **1.5× / 2.5× ATR**.
         page_detail(df)
 
     st.markdown("---")
-    st.caption(
-        "⚠️ Edukasi saja. Bukan saran investasi / ajakan transaksi. "
-        "Selalu DYOR dan sesuaikan dengan profil risiko Anda."
-    )
-
+    st.caption("⚠️ Disclaimer: Alat analisis teknikal otomatis untuk edukasi pasar modal syariah. Selalu lakukan riset mandiri (DYOR) sebelum bertransaksi.")
 
 if __name__ == "__main__":
     main()
